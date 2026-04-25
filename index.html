@@ -58,9 +58,12 @@
           .then(data => {
             const index = {};
             data.forEach(item => {
-              // 0埋めのブレ（"01"と"1"の違いなど）を吸収するため、一度数値にして文字列化
+              // 0埋めのブレ吸収と同時に、マスタのcityが「県コードを含む5桁(例:1224)」か「下3桁のみ(例:224)」かの違いも吸収する
               const pCode = String(Number(item.pref));
-              const cCode = String(Number(item.city));
+              const cCodeRaw = String(item.city).trim();
+              // 下3桁を取り出して数値化することで、純粋な市区町村コードとして統一
+              const cCode = String(Number(cCodeRaw.length > 3 ? cCodeRaw.slice(-3) : cCodeRaw));
+              
               if (!index[pCode]) index[pCode] = {};
               if (!index[pCode][cCode]) index[pCode][cCode] = [];
               index[pCode][cCode].push({ address: item.address, zip: item.zip });
@@ -250,9 +253,11 @@
                   // --- 郵便番号の特定ロジック ---
                   let zipCodeFound = "";
                   if (prefIdx !== -1 && cityIdx !== -1 && addressIdx !== -1 && row[addressIdx]) {
-                    // CSV側も0埋めのブレを吸収する
+                    // CSV側も同様にブレと桁数の違いを吸収する
                     const prefCode = String(Number(row[prefIdx]));
-                    const cityCode = String(Number(row[cityIdx]));
+                    const rawCity = String(row[cityIdx]).trim();
+                    const cityCode = String(Number(rawCity.length > 3 ? rawCity.slice(-3) : rawCity));
+                    
                     const workAddress = String(row[addressIdx]);
 
                     if (zipcodeIndex[prefCode] && zipcodeIndex[prefCode][cityCode]) {
