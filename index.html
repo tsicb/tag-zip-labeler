@@ -20,6 +20,7 @@
     // --- アイコンコンポーネント ---
     const Icons = {
       Upload: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+      Download: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
       CheckCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
       AlertCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
       Loader2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
@@ -367,6 +368,41 @@
         setScrollTop(e.target.scrollTop);
       };
 
+      const handleDownloadPreviewCSV = () => {
+        // ヘッダー行を作成
+        const headers = ['仕事番号', '仕事名', '郵便番号', 'Indeed用求人関連タグ', '求人タグの内容'];
+        
+        // プレビューデータから出力用の行を作成
+        const rows = previewData.map(row => [
+          row.jobId,
+          row.jobName,
+          row.zip !== '-' ? `="${row.zip}"` : "", // Excelの「0」落ち対策
+          row.tagsCode,
+          row.tagsText
+        ]);
+
+        const csvContent = generateCSV([headers, ...rows]);
+        
+        // Shift-JISに変換
+        const unicodeArray = Encoding.stringToCode(csvContent);
+        const sjisArray = Encoding.convert(unicodeArray, {
+          to: 'SJIS',
+          from: 'UNICODE'
+        });
+        
+        const blob = new Blob([new Uint8Array(sjisArray)], { type: 'text/csv;charset=shift_jis;' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `preview_data.csv`);
+        link.setAttribute('target', '_blank');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
       const rowHeight = 60;
       const containerHeight = 800;
       const overscan = 15;
@@ -514,15 +550,24 @@
               <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white">
                 <h2 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-orange-500 flex items-center">
                   <Icons.Table className="w-6 h-6 mr-2 text-pink-500" />
-                  抽出結果プレビュー <span className="text-sm font-medium text-slate-400 ml-3">※遅延ゼロスクロールON</span>
+                  抽出結果プレビュー
                 </h2>
-                <button
-                  onClick={() => setCurrentView('main')}
-                  className="flex items-center space-x-2 px-5 py-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 hover:text-slate-800 transition-all text-sm font-bold shadow-sm"
-                >
-                  <Icons.ArrowLeft className="w-4 h-4" />
-                  <span>アップロード画面に戻る</span>
-                </button>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleDownloadPreviewCSV}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-green-400 to-emerald-400 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all text-sm font-bold shadow-sm"
+                  >
+                    <Icons.Download className="w-4 h-4" />
+                    <span>プレビュー表をダウンロード</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentView('main')}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 hover:text-slate-800 transition-all text-sm font-bold shadow-sm"
+                  >
+                    <Icons.ArrowLeft className="w-4 h-4" />
+                    <span>アップロード画面に戻る</span>
+                  </button>
+                </div>
               </div>
               
               <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-4 border-white overflow-hidden">
