@@ -252,19 +252,25 @@
 
                   // --- 郵便番号の特定ロジック ---
                   let zipCodeFound = "";
-                  if (prefIdx !== -1 && cityIdx !== -1 && addressIdx !== -1 && row[addressIdx]) {
-                    // CSV側も同様にブレと桁数の違いを吸収する
-                    const prefCode = String(Number(row[prefIdx]));
-                    const rawCity = String(row[cityIdx]).trim();
-                    const cityCode = String(Number(rawCity.length > 3 ? rawCity.slice(-3) : rawCity));
+                  if (prefIdx !== -1 && cityIdx !== -1 && addressIdx !== -1) {
+                    const prefRaw = row[prefIdx] ? String(row[prefIdx]).trim() : "";
+                    const cityRaw = row[cityIdx] ? String(row[cityIdx]).trim() : "";
                     
-                    const workAddress = String(row[addressIdx]);
+                    if (prefRaw !== "" && cityRaw !== "") {
+                      // CSV側も同様にブレと桁数の違いを吸収する
+                      const prefCode = String(Number(prefRaw));
+                      const cityCode = String(Number(cityRaw.length > 3 ? cityRaw.slice(-3) : cityRaw));
+                      
+                      // 住所が空白（空文字）の場合も処理対象にする
+                      const workAddress = row[addressIdx] ? String(row[addressIdx]).trim() : "";
 
-                    if (zipcodeIndex[prefCode] && zipcodeIndex[prefCode][cityCode]) {
-                      const candidates = zipcodeIndex[prefCode][cityCode];
-                      // 降順ソート済みのため、最初に見つかったものが最長一致となる
-                      const match = candidates.find(c => workAddress.includes(c.address));
-                      if (match) zipCodeFound = match.zip;
+                      if (zipcodeIndex[prefCode] && zipcodeIndex[prefCode][cityCode]) {
+                        const candidates = zipcodeIndex[prefCode][cityCode];
+                        // 降順ソート済みのため、最初に見つかったものが最長一致となる
+                        // workAddressが空の場合、c.addressが空（""）のマスタにのみマッチする
+                        const match = candidates.find(c => workAddress.includes(c.address));
+                        if (match) zipCodeFound = match.zip;
+                      }
                     }
                   }
                   
