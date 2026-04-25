@@ -58,9 +58,12 @@
           .then(data => {
             const index = {};
             data.forEach(item => {
-              if (!index[item.pref]) index[item.pref] = {};
-              if (!index[item.pref][item.city]) index[item.pref][item.city] = [];
-              index[item.pref][item.city].push({ address: item.address, zip: item.zip });
+              // 0埋めのブレ（"01"と"1"の違いなど）を吸収するため、一度数値にして文字列化
+              const pCode = String(Number(item.pref));
+              const cCode = String(Number(item.city));
+              if (!index[pCode]) index[pCode] = {};
+              if (!index[pCode][cCode]) index[pCode][cCode] = [];
+              index[pCode][cCode].push({ address: item.address, zip: item.zip });
             });
             // 住所長の降順でソート（「西新宿一丁目」のような長い住所から部分一致させるため）
             for (const pref in index) {
@@ -247,8 +250,9 @@
                   // --- 郵便番号の特定ロジック ---
                   let zipCodeFound = "";
                   if (prefIdx !== -1 && cityIdx !== -1 && addressIdx !== -1 && row[addressIdx]) {
-                    const prefCode = String(row[prefIdx]).trim();
-                    const cityCode = String(row[cityIdx]).trim();
+                    // CSV側も0埋めのブレを吸収する
+                    const prefCode = String(Number(row[prefIdx]));
+                    const cityCode = String(Number(row[cityIdx]));
                     const workAddress = String(row[addressIdx]);
 
                     if (zipcodeIndex[prefCode] && zipcodeIndex[prefCode][cityCode]) {
