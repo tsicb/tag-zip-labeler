@@ -441,26 +441,36 @@
                 
                 {/* 設定項目エリア */}
                 <div className="flex flex-col items-center mb-8">
-                  {/* 郵便番号フォーマット選択 */}
+                  {/* 郵便番号フォーマット選択（スライディングトグル） */}
                   <div className="flex flex-col items-center">
                     <p className="text-xs font-bold text-slate-500 mb-2">郵便番号の出力形式</p>
-                    <div className="bg-white p-1 rounded-full border border-pink-200 inline-flex shadow-sm">
+                    <div className="relative bg-white p-1 rounded-full border border-pink-200 flex shadow-sm w-72 h-[42px]">
+                      
+                      {/* スライダー背景 */}
+                      <div
+                        className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-gradient-to-r from-pink-400 to-orange-400 rounded-full shadow-md transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden"
+                        style={{ transform: zipFormat === 'system' ? 'translateX(0)' : 'translateX(100%)' }}
+                      >
+                        {/* キラッと光るエフェクト (zipFormatが変わるたびに再実行される) */}
+                        <div 
+                          key={zipFormat}
+                          className="absolute top-0 left-0 w-[150%] h-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shine pointer-events-none"
+                          style={{ animationDelay: '300ms' }}
+                        />
+                      </div>
+
                       <button
                         onClick={() => setZipFormat('system')}
-                        className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
-                          zipFormat === 'system' 
-                            ? 'bg-gradient-to-r from-pink-400 to-orange-400 text-white shadow-md' 
-                            : 'text-slate-400 hover:text-pink-500'
+                        className={`relative z-10 flex-1 flex items-center justify-center text-sm font-bold transition-colors duration-300 ${
+                          zipFormat === 'system' ? 'text-white' : 'text-slate-400 hover:text-pink-500'
                         }`}
                       >
                         システム用
                       </button>
                       <button
                         onClick={() => setZipFormat('excel')}
-                        className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
-                          zipFormat === 'excel' 
-                            ? 'bg-gradient-to-r from-pink-400 to-orange-400 text-white shadow-md' 
-                            : 'text-slate-400 hover:text-pink-500'
+                        className={`relative z-10 flex-1 flex items-center justify-center text-sm font-bold transition-colors duration-300 ${
+                          zipFormat === 'excel' ? 'text-white' : 'text-slate-400 hover:text-pink-500'
                         }`}
                       >
                         Excel確認用
@@ -667,6 +677,16 @@
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes slideInBottom2 { from { transform: translateY(0.5rem); } to { transform: translateY(0); } }
     @keyframes slideInBottom4 { from { transform: translateY(1rem); } to { transform: translateY(0); } }
+
+    /* トグルボタンのキラッと光るエフェクト */
+    @keyframes shineEffect {
+      0% { transform: translateX(-150%) skewX(-20deg); }
+      100% { transform: translateX(150%) skewX(-20deg); }
+    }
+    .animate-shine {
+      transform: translateX(-150%) skewX(-20deg);
+      animation: shineEffect 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
   </style>
 </body>
 </html>
