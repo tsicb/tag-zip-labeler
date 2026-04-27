@@ -467,12 +467,6 @@
                         className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-gradient-to-r from-pink-400 to-orange-400 rounded-full shadow-md transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden"
                         style={{ transform: zipFormat === 'system' ? 'translateX(0)' : 'translateX(100%)' }}
                       >
-                        {/* キラッと光るエフェクト (zipFormatが変わるたびに再実行される) */}
-                        <div 
-                          key={zipFormat}
-                          className="absolute top-0 left-0 w-[150%] h-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shine pointer-events-none"
-                          style={{ animationDelay: '300ms' }}
-                        />
                       </div>
 
                       <button
@@ -693,16 +687,6 @@
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes slideInBottom2 { from { transform: translateY(0.5rem); } to { transform: translateY(0); } }
     @keyframes slideInBottom4 { from { transform: translateY(1rem); } to { transform: translateY(0); } }
-
-    /* トグルボタンのキラッと光るエフェクト */
-    @keyframes shineEffect {
-      0% { transform: translateX(-150%) skewX(-20deg); }
-      100% { transform: translateX(150%) skewX(-20deg); }
-    }
-    .animate-shine {
-      transform: translateX(-150%) skewX(-20deg);
-      animation: shineEffect 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    }
   </style>
 </body>
 </html>
