@@ -175,12 +175,19 @@
         setIsProcessing(true);
         setStatusInfo({ type: 'processing', message: '処理中...' });
 
-        const processFile = (encodingToUse) => {
+        // isRetryフラグを追加し、再チャレンジかどうかを判定できるようにする
+        const processFile = (encodingToUse, isRetry = false) => {
           const reader = new FileReader();
           reader.onload = (event) => {
             setTimeout(() => {
               try {
-                const text = event.target.result;
+                let text = event.target.result;
+                
+                // 【対策1】ファイルの先頭にBOM（見えないゴミ）が付着している場合は取り除く
+                if (text.charCodeAt(0) === 0xFEFF) {
+                  text = text.slice(1);
+                }
+
                 const parsed = parseCSV(text);
                 
                 if (parsed.length <= 1) {
@@ -195,6 +202,7 @@
                 let prefIdx = -1, cityIdx = -1, addressIdx = -1, zipOutIdx = -1;
 
                 headerRow.forEach((colName, idx) => {
+                  // セルの前後の空白や見えない文字を綺麗にする
                   const cleanName = colName.trim();
                   if (TARGET_COLUMNS.includes(cleanName)) indices.push(idx);
                   if (cleanName === '職種コード') jobIdx = idx;
@@ -209,6 +217,14 @@
                 });
 
                 if (indices.length === 0 && jobIdx === -1 && featIdx === -1) {
+                  // 【対策2】ヘッダーが1つも見つからない場合、文字コードの誤判定を疑って別の文字コードで再読込する
+                  if (!isRetry) {
+                    const fallbackEncoding = encodingToUse === 'Shift_JIS' ? 'UTF-8' : 'Shift_JIS';
+                    processFile(fallbackEncoding, true); // trueを渡して再チャレンジ
+                    return;
+                  }
+
+                  // 2回目のチャレンジでもダメだった場合のみエラーを出す
                   setStatusInfo({ type: 'error', message: '検索対象の列が見つかりません。ヘッダー名を確認してください。' });
                   setIsProcessing(false);
                   return;
@@ -347,8 +363,8 @@
           reader.readAsText(file, encodingToUse);
         };
 
-        // 常に文字コードの自動判定を行う
-        const blob = file.slice(0, 4096); 
+        // 自動判定の精度を上げるため、読み取る量を4KBから10KBに少し増やします
+        const blob = file.slice(0, 10240); 
         const bufferReader = new FileReader();
         
         bufferReader.onload = (e) => {
@@ -360,7 +376,7 @@
             encodingToUse = 'UTF-8';
           }
           
-          processFile(encodingToUse);
+          processFile(encodingToUse); // 初回チャレンジスタート
         };
         bufferReader.readAsArrayBuffer(blob);
       };
