@@ -55,7 +55,7 @@
       useEffect(() => {
         // 郵便番号マスタとキーワードマスタの2つのJSONを並行してダウンロード（Promise.all）
         Promise.all([
-          fetch('./zipcode_master.json').then(res => {
+          fetch('/address-master/zipcode_master.json').then(res => {
             if (!res.ok) throw new Error('Network error (zipcode_master)');
             return res.json();
           }),
@@ -95,7 +95,7 @@
           setIsMasterLoading(false); // 2つの読み込みが完了したらブロックを解除
         })
         .catch(err => {
-          console.warn("マスタデータが読み込めませんでした。同階層に zipcode_master.json と keyword_master.json を配置してください。", err);
+          console.warn("マスタデータが読み込めませんでした。address-master の zipcode_master.json と同階層の keyword_master.json を確認してください。", err);
           setIsMasterLoading(false); // エラー時もとりあえずUIブロックを解除
         });
       }, []);
