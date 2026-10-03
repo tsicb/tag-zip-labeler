@@ -120,7 +120,8 @@
           const loaded = await module.loadAdvancedTagger();
           const resource = {
             ...loaded,
-            buildAdvancedSource: module.buildAdvancedSource
+            buildAdvancedSource: module.buildAdvancedSource,
+            buildAdvancedFields: module.buildAdvancedFields
           };
           advancedTaggerRef.current = resource;
           setAdvancedStatus({
@@ -333,14 +334,16 @@
                       throw new Error('高精度判定マスタが準備できていません。');
                     }
 
-                    const advancedSource = tagger.buildAdvancedSource({
+                    const advancedArgs = {
                       row,
                       headerRow,
                       indices,
                       jobTypeText,
                       featureTexts
-                    });
-                    const analysis = tagger.analyzeText(advancedSource);
+                    };
+                    const advancedFields = tagger.buildAdvancedFields(advancedArgs);
+                    const advancedSource = tagger.buildAdvancedSource(advancedArgs);
+                    const analysis = tagger.analyzeFields(advancedFields);
 
                     foundCodes = analysis.matched.map(item => String(item.tag_code));
                     foundKeywords = analysis.matched.map(item => item.job_tag || item.canonical);

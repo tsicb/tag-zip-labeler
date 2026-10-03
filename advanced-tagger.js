@@ -1,7 +1,7 @@
 const ADVANCED_BASE = "/job-tag-alias-master/";
 const MASTER_URL = ADVANCED_BASE + "data/job-tags.json";
 const DEFAULTS_URL = ADVANCED_BASE + "config/matching-defaults.json";
-const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004c";
+const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004d";
 
 let resourcePromise = null;
 
@@ -44,6 +44,16 @@ export async function loadAdvancedTagger() {
       snapshotDate: master.snapshot_date,
       analyzeText(text) {
         return matcher.analyzeText(text, master, defaults);
+      },
+      analyzeFields(fields) {
+        if (typeof matcher.analyzeFields === "function") {
+          return matcher.analyzeFields(fields, master, defaults);
+        }
+        const fallbackText = (fields || [])
+          .filter(field => field && field.value)
+          .map(field => (LABEL_MAP[field.name] || field.name || "項目") + "：" + String(field.value))
+          .join("\n");
+        return matcher.analyzeText(fallbackText, master, defaults);
       }
     };
   }).catch(error => {
@@ -54,25 +64,30 @@ export async function loadAdvancedTagger() {
   return resourcePromise;
 }
 
-export function buildAdvancedSource({ row, headerRow, indices, jobTypeText, featureTexts }) {
-  const parts = [];
+export function buildAdvancedFields({ row, headerRow, indices, jobTypeText, featureTexts }) {
+  const fields = [];
 
   indices.forEach(idx => {
     if (!row[idx]) return;
-    const rawName = String(headerRow[idx] || "").trim();
-    const label = LABEL_MAP[rawName] || rawName || ("列" + idx);
-    parts.push(label + "：" + String(row[idx]));
+    const rawName = String(headerRow[idx] || "").trim() || ("列" + idx);
+    fields.push({ name: rawName, value: String(row[idx]) });
   });
 
   if (jobTypeText) {
-    parts.push("職種コード名称：" + jobTypeText);
+    fields.push({ name: "職種コード名称", value: String(jobTypeText) });
   }
 
   (featureTexts || []).forEach(text => {
-    if (text) parts.push("特徴コード名称：" + text);
+    if (text) fields.push({ name: "特徴コード名称", value: String(text) });
   });
 
-  return parts.join("\n");
+  return fields;
+}
+
+export function buildAdvancedSource(args) {
+  return buildAdvancedFields(args)
+    .map(field => (LABEL_MAP[field.name] || field.name) + "：" + field.value)
+    .join("\n");
 }
 
 export const advancedTaggingMeta = {
