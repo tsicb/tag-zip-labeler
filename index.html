@@ -46,7 +46,7 @@
       const [statusInfo, setStatusInfo] = useState({ type: 'idle', message: 'CSVファイルを選択してください' });
       const [currentView, setCurrentView] = useState('main');
       const [previewData, setPreviewData] = useState([]);
-      const [zipFormat, setZipFormat] = useState('system'); // 'system' (通常) または 'excel' (数式化)
+      const [isDragging, setIsDragging] = useState(false);
       const [tagMode, setTagMode] = useState('legacy'); // 既存利用者保護のため当面は現行方式をデフォルト
       const [processedTagMode, setProcessedTagMode] = useState('legacy');
       const [advancedStatus, setAdvancedStatus] = useState({ type: 'idle', message: '' });
@@ -222,9 +222,13 @@
         }).join('\r\n');
       };
 
-      const handleFileUpload = (e) => {
-        const file = e.target.files[0];
+      const handleSelectedFile = (file) => {
         if (!file) return;
+
+        if (!String(file.name || '').toLowerCase().endsWith('.csv')) {
+          setStatusInfo({ type: 'error', message: 'CSVファイルを選択してください。' });
+          return;
+        }
 
         setIsProcessing(true);
         setStatusInfo({ type: 'processing', message: '処理中...' });
@@ -400,10 +404,8 @@
                     }
                   }
                   
-                  // Excel用の場合は数式化し、システム用の場合はそのまま出力
-                  const formattedZip = zipCodeFound 
-                    ? (zipFormat === 'excel' ? `="${zipCodeFound}"` : zipCodeFound) 
-                    : "";
+                  // 郵便番号は求人管理画面へそのままアップロードできる通常形式で出力
+                  const formattedZip = zipCodeFound || "";
 
                   newPreviewData.push({
                     jobId: jobIdIdx !== -1 && row[jobIdIdx] ? row[jobIdIdx] : '-',
@@ -485,6 +487,35 @@
         bufferReader.readAsArrayBuffer(blob);
       };
 
+      const handleFileUpload = (e) => {
+        const file = e.target.files?.[0];
+        handleSelectedFile(file);
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isProcessing || isMasterLoading || advancedStatus.type === 'loading') return;
+        e.dataTransfer.dropEffect = 'copy';
+        setIsDragging(true);
+      };
+
+      const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.currentTarget.contains(e.relatedTarget)) return;
+        setIsDragging(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        if (isProcessing || isMasterLoading || advancedStatus.type === 'loading') return;
+        const file = e.dataTransfer.files?.[0];
+        handleSelectedFile(file);
+      };
+
       const handleScroll = (e) => {
         setScrollTop(e.target.scrollTop);
       };
@@ -497,7 +528,7 @@
         const rows = previewData.map(row => [
           row.jobId,
           row.jobName,
-          row.zip !== '-' ? (zipFormat === 'excel' ? `="${row.zip}"` : row.zip) : "", // 選択されたフォーマットを適用
+          row.zip !== '-' ? row.zip : "",
           row.tagsCode,
           row.tagsText
         ]);
@@ -569,62 +600,28 @@
 
               <div className="bg-white/80 backdrop-blur-sm p-8 rounded-[2.5rem] shadow-xl border-4 border-white">
                 
-                {/* 設定項目エリア */}
-                <div className="flex flex-col items-center mb-8">
-                  {/* 郵便番号フォーマット選択（スライディングトグル） */}
-                  <div className="flex flex-col items-center">
-                    <p className="text-xs font-bold text-slate-500 mb-2">郵便番号の出力形式</p>
-                    <div className="relative bg-white p-1 rounded-full border border-pink-200 flex shadow-sm w-72 h-[42px]">
-                      
-                      {/* スライダー背景 */}
-                      <div
-                        className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-gradient-to-r from-pink-400 to-orange-400 rounded-full shadow-md transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden"
-                        style={{ transform: zipFormat === 'system' ? 'translateX(0)' : 'translateX(100%)' }}
-                      >
-                      </div>
-
-                      <button
-                        onClick={() => setZipFormat('system')}
-                        className={`relative z-10 flex-1 flex items-center justify-center text-sm font-bold transition-colors duration-300 ${
-                          zipFormat === 'system' ? 'text-white' : 'text-slate-400 hover:text-pink-500'
-                        }`}
-                      >
-                        システム用
-                      </button>
-                      <button
-                        onClick={() => setZipFormat('excel')}
-                        className={`relative z-10 flex-1 flex items-center justify-center text-sm font-bold transition-colors duration-300 ${
-                          zipFormat === 'excel' ? 'text-white' : 'text-slate-400 hover:text-pink-500'
-                        }`}
-                      >
-                        Excel確認用
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mb-5 pt-5 border-t border-orange-100">
+                <div className="mb-6">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <p className="text-xs font-bold text-slate-500">求人タグ判定モード</p>
                     <button
                       type="button"
                       onClick={() => setShowTagHelp(true)}
-                      className="w-5 h-5 rounded-full border border-slate-300 text-slate-400 hover:text-blue-500 hover:border-blue-300 text-[11px] font-bold flex items-center justify-center"
+                      className="w-5 h-5 rounded-full border border-slate-300 text-slate-400 hover:text-pink-500 hover:border-pink-300 text-[11px] font-bold flex items-center justify-center"
                       title="判定方式について"
                     >
                       i
                     </button>
                   </div>
 
-                  <div className="relative mx-auto bg-white p-1 rounded-full border border-blue-200 flex shadow-sm w-80 h-[42px]">
+                  <div className="relative mx-auto bg-white p-1 rounded-full border border-pink-200 flex shadow-sm w-80 h-[42px]">
                     <div
-                      className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full shadow-md transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                      className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-gradient-to-r from-pink-400 to-orange-400 rounded-full shadow-md transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
                       style={{ transform: tagMode === 'legacy' ? 'translateX(0)' : 'translateX(100%)' }}
                     ></div>
                     <button
                       type="button"
                       onClick={() => handleTagModeChange('legacy')}
-                      className={`relative z-10 flex-1 text-sm font-bold transition-colors ${tagMode === 'legacy' ? 'text-white' : 'text-slate-400 hover:text-blue-500'}`}
+                      className={`relative z-10 flex-1 text-sm font-bold transition-colors ${tagMode === 'legacy' ? 'text-white' : 'text-slate-400 hover:text-pink-500'}`}
                     >
                       現行方式
                     </button>
@@ -632,7 +629,7 @@
                       type="button"
                       onClick={() => handleTagModeChange('advanced')}
                       disabled={advancedStatus.type === 'loading'}
-                      className={`relative z-10 flex-1 text-sm font-bold transition-colors ${tagMode === 'advanced' ? 'text-white' : 'text-slate-400 hover:text-blue-500'}`}
+                      className={`relative z-10 flex-1 text-sm font-bold transition-colors ${tagMode === 'advanced' ? 'text-white' : 'text-slate-400 hover:text-pink-500'}`}
                     >
                       高精度（試験運用）
                     </button>
@@ -645,25 +642,31 @@
                     <p className="mt-2 text-center text-xs font-bold text-red-500">{advancedStatus.message}</p>
                   )}
                   {tagMode === 'advanced' && advancedStatus.type === 'ready' && (
-                    <div className="mt-3 mx-auto max-w-lg rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-relaxed text-blue-700">
+                    <div className="mt-3 mx-auto max-w-lg rounded-xl border border-pink-100 bg-pink-50/70 px-4 py-3 text-xs leading-relaxed text-pink-700">
                       別表記・文脈・数値条件まで確認してタグを判定します。
-                      <strong className="ml-1">確定タグだけをCSVへ自動付与</strong>し、要確認・抑止は確認表に残します。
+                      <strong className="ml-1 text-pink-700">確定タグだけをCSVへ自動付与</strong>し、要確認・抑止は確認表に残します。
                     </div>
                   )}
                 </div>
 
-                <p className="text-center text-xs text-pink-500 font-bold mb-6 bg-pink-50 py-2 rounded-lg border border-pink-100">
-                  ※求人管理画面にアップロードする場合は必ず「システム用」のまま実行してください。
+                <p className="text-center text-xs text-amber-700 font-bold mb-6 bg-amber-50 py-2.5 px-4 rounded-lg border border-amber-100 leading-relaxed">
+                  ※CSVをExcelで開くと、郵便番号の先頭「0」が表示上消える場合があります。ダウンロードしたCSVは、そのまま求人管理画面へアップロードできます。
                 </p>
 
-                <div 
+                <div
                   className={`group border-4 border-dashed rounded-[2rem] p-12 flex flex-col items-center justify-center transition-all duration-300 cursor-pointer transform
                     ${isUploadBlocked
-                      ? 'border-purple-300 bg-purple-50 scale-95 cursor-wait' 
-                      : 'border-pink-300 bg-white hover:bg-pink-50 hover:border-pink-400 hover:scale-105 shadow-inner'
+                      ? 'border-purple-300 bg-purple-50 scale-95 cursor-wait'
+                      : isDragging
+                        ? 'border-pink-500 bg-pink-100 scale-[1.02] shadow-lg'
+                        : 'border-pink-300 bg-white hover:bg-pink-50 hover:border-pink-400 hover:scale-105 shadow-inner'
                     }
                   `}
                   onClick={() => !isUploadBlocked && fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                 >
                   {isUploadBlocked ? (
                     <div className="relative mb-4">
@@ -677,10 +680,10 @@
                   )}
                   
                   <p className="font-bold text-slate-700 text-xl">
-                    {isMasterLoading ? 'マスタデータ読込中...' : isAdvancedLoading ? '高精度判定を準備中...' : isProcessing ? '処理中...' : 'ここをクリックしてCSVをえらぶ'}
+                    {isMasterLoading ? 'マスタデータ読込中...' : isAdvancedLoading ? '高精度判定を準備中...' : isProcessing ? '処理中...' : isDragging ? 'ここにCSVをドロップ' : 'CSVをクリックで選択 / ドラッグ＆ドロップ'}
                   </p>
                   <p className="text-sm text-pink-500 mt-3 font-medium bg-pink-100/50 px-4 py-1.5 rounded-full">
-                    {isMasterLoading ? '少し待ってね' : isAdvancedLoading ? '高精度マスタを読み込んでいます' : isProcessing ? '少々お待ちください...' : '※えらぶとすぐにダウンロードがはじまります'}
+                    {isMasterLoading ? '少し待ってね' : isAdvancedLoading ? '高精度マスタを読み込んでいます' : isProcessing ? '少々お待ちください...' : '※選択またはドロップすると、すぐに処理とダウンロードが始まります'}
                   </p>
                   
                   <input 
@@ -708,7 +711,7 @@
                       </div>
                       <button
                         onClick={() => setCurrentView('preview')}
-                        className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-400 to-cyan-400 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all text-sm font-bold shadow-md"
+                        className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-pink-400 to-orange-400 text-white rounded-full hover:shadow-lg hover:scale-105 transition-all text-sm font-bold shadow-md"
                       >
                         <Icons.Table className="w-5 h-5" />
                         <span>抽出結果の確認表を見る</span>
