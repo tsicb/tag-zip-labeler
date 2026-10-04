@@ -180,3 +180,18 @@ Advanced matcherは、全4,000件超の検索語を求人ごとに総当たり�
 - index nodes: 候補インデックスのノード数
 
 patternタグ、海semantic pattern、entity由来タグはliteral候補の有無にかかわらず評価されます。
+
+
+### Output profiling
+
+`?debug=1` ではCSV出力工程も次の単位で分解表示する。
+
+- csv generate: processedDataからCSV文字列を生成
+- unicode array: Encoding.stringToCode
+- sjis convert: Unicode配列からShift-JISへ変換
+- uint8 + blob: Uint8Array化とBlob生成
+- object URL: URL.createObjectURL
+- download setup: a要素生成・clickまで
+- csv chars / sjis bytes: 出力規模
+
+output最適化は、この実測で支配的な工程を確認してから行う。通常利用時の出力仕様・Shift-JIS固定方針は変更しない。
