@@ -2,7 +2,7 @@ const ADVANCED_BASE = "/job-tag-alias-master/";
 const MASTER_URL = ADVANCED_BASE + "data/job-tags.json";
 const DEFAULTS_URL = ADVANCED_BASE + "config/matching-defaults.json";
 const ENTITIES_URL = ADVANCED_BASE + "data/location-entities.json";
-const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004f";
+const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004g";
 
 let resourcePromise = null;
 
@@ -36,6 +36,10 @@ export async function loadAdvancedTagger() {
       throw new Error("Advanced判定エンジンを読み込めませんでした");
     }
 
+    const compiled = typeof matcher.compileMatcher === "function"
+      ? matcher.compileMatcher(master, defaults, entities)
+      : null;
+
     const codeMap = {};
     master.tags.forEach(tag => {
       codeMap[String(tag.tag_code)] = tag.job_tag || tag.canonical;
@@ -48,18 +52,18 @@ export async function loadAdvancedTagger() {
       codeMap,
       version: master.schema_version,
       snapshotDate: master.snapshot_date,
-      analyzeText(text) {
-        return matcher.analyzeText(text, master, defaults, entities);
+      performanceMeta: compiled ? compiled.stats : null,
+      analyzeText(text, options) {
+        if (compiled) return compiled.analyzeText(text, options);
+        return matcher.analyzeText(text, master, defaults, entities, options);
       },
-      analyzeFields(fields) {
+      analyzeFields(fields, options) {
+        if (compiled) return compiled.analyzeFields(fields, options);
         if (typeof matcher.analyzeFields === "function") {
-          return matcher.analyzeFields(fields, master, defaults, entities);
+          return matcher.analyzeFields(fields, master, defaults, entities, options);
         }
-        const fallbackText = (fields || [])
-          .filter(field => field && field.value)
-          .map(field => (LABEL_MAP[field.name] || field.name || "項目") + "：" + String(field.value))
-          .join("\n");
-        return matcher.analyzeText(fallbackText, master, defaults, entities);
+        const fallbackText = buildAdvancedSourceFromFields(fields);
+        return matcher.analyzeText(fallbackText, master, defaults, entities, options);
       }
     };
   }).catch(error => {
@@ -90,10 +94,14 @@ export function buildAdvancedFields({ row, headerRow, indices, jobTypeText, feat
   return fields;
 }
 
-export function buildAdvancedSource(args) {
-  return buildAdvancedFields(args)
-    .map(field => (LABEL_MAP[field.name] || field.name) + "：" + field.value)
+export function buildAdvancedSourceFromFields(fields) {
+  return (fields || [])
+    .map(field => (LABEL_MAP[field.name] || field.name || "項目") + "：" + field.value)
     .join("\n");
+}
+
+export function buildAdvancedSource(args) {
+  return buildAdvancedSourceFromFields(buildAdvancedFields(args));
 }
 
 export const advancedTaggingMeta = {
