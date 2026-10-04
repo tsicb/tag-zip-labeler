@@ -311,6 +311,14 @@
                   matcherImplicationMs: 0,
                   matcherSortMs: 0,
                   outputMs: 0,
+                  csvGenerateMs: 0,
+                  unicodeArrayMs: 0,
+                  sjisConvertMs: 0,
+                  uint8BlobMs: 0,
+                  objectUrlMs: 0,
+                  downloadSetupMs: 0,
+                  csvChars: 0,
+                  sjisBytes: 0,
                   totalMs: 0,
                   compile: tagMode === 'advanced' && advancedTaggerRef.current
                     ? advancedTaggerRef.current.performanceMeta
@@ -483,18 +491,39 @@
                 setProcessedTagMode(tagMode);
 
                 const outputStarted = performance.now();
+
+                const csvGenerateStarted = debugPerf ? performance.now() : 0;
                 const csvContent = generateCSV(processedData);
+                if (debugPerf) {
+                  debugPerf.csvGenerateMs = performance.now() - csvGenerateStarted;
+                  debugPerf.csvChars = csvContent.length;
+                }
                 
                 // 出力は常に入力に関わらず Shift-JIS に変換する
+                const unicodeStarted = debugPerf ? performance.now() : 0;
                 const unicodeArray = Encoding.stringToCode(csvContent);
+                if (debugPerf) debugPerf.unicodeArrayMs = performance.now() - unicodeStarted;
+
+                const sjisStarted = debugPerf ? performance.now() : 0;
                 const sjisArray = Encoding.convert(unicodeArray, {
                   to: 'SJIS',
                   from: 'UNICODE'
                 });
+                if (debugPerf) {
+                  debugPerf.sjisConvertMs = performance.now() - sjisStarted;
+                  debugPerf.sjisBytes = sjisArray.length;
+                }
                 
-                const blob = new Blob([new Uint8Array(sjisArray)], { type: 'text/csv;charset=shift_jis;' });
+                const blobStarted = debugPerf ? performance.now() : 0;
+                const sjisBytes = new Uint8Array(sjisArray);
+                const blob = new Blob([sjisBytes], { type: 'text/csv;charset=shift_jis;' });
+                if (debugPerf) debugPerf.uint8BlobMs = performance.now() - blobStarted;
+
+                const urlStarted = debugPerf ? performance.now() : 0;
                 const url = URL.createObjectURL(blob);
+                if (debugPerf) debugPerf.objectUrlMs = performance.now() - urlStarted;
                 
+                const downloadStarted = debugPerf ? performance.now() : 0;
                 const link = document.createElement('a');
                 link.setAttribute('href', url);
                 link.setAttribute('download', `tagged_${file.name || 'data.csv'}`);
@@ -503,6 +532,7 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                if (debugPerf) debugPerf.downloadSetupMs = performance.now() - downloadStarted;
 
                 if (debugPerf) {
                   debugPerf.outputMs = performance.now() - outputStarted;
@@ -798,6 +828,14 @@
                         <span>row loop: {perfInfo.rowLoopMs.toFixed(1)} ms</span>
                         <span>tagging: {perfInfo.taggingWallMs.toFixed(1)} ms</span>
                         <span>output: {perfInfo.outputMs.toFixed(1)} ms</span>
+                        <span>csv generate: {perfInfo.csvGenerateMs.toFixed(1)} ms</span>
+                        <span>unicode array: {perfInfo.unicodeArrayMs.toFixed(1)} ms</span>
+                        <span>sjis convert: {perfInfo.sjisConvertMs.toFixed(1)} ms</span>
+                        <span>uint8 + blob: {perfInfo.uint8BlobMs.toFixed(1)} ms</span>
+                        <span>object URL: {perfInfo.objectUrlMs.toFixed(1)} ms</span>
+                        <span>download setup: {perfInfo.downloadSetupMs.toFixed(1)} ms</span>
+                        <span>csv chars: {perfInfo.csvChars.toLocaleString()}</span>
+                        <span>sjis bytes: {perfInfo.sjisBytes.toLocaleString()}</span>
                         {perfInfo.mode === 'advanced' && (
                           <>
                             <span>matcher: {perfInfo.matcherTotalMs.toFixed(1)} ms</span>
