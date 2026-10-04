@@ -269,7 +269,7 @@
         // Candidate A: Encoding.convertへ文字列を直接渡す。
         try {
           const directStarted = performance.now();
-          const directOutput = Encoding.convert(csvContent, {
+          let directOutput = Encoding.convert(csvContent, {
             to: 'SJIS',
             from: 'UNICODE',
             type: 'array'
@@ -287,6 +287,7 @@
             bytes: byteLengthOf(directOutput),
             sameBytes: directCompare.same && byteLengthOf(directOutput) === baselineSjisArray.length
           };
+          directOutput = null;
         } catch (error) {
           result.direct = {
             supported: false,
