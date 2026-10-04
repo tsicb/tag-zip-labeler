@@ -195,3 +195,26 @@ patternタグ、海semantic pattern、entity由来タグはliteral候補の有�
 - csv chars / sjis bytes: 出力規模
 
 output最適化は、この実測で支配的な工程を確認してから行う。通常利用時の出力仕様・Shift-JIS固定方針は変更しない。
+
+
+### Shift-JIS benchmark
+
+`?debug=1` では、通常のShift-JIS出力を完了したあとに追加ベンチマークを実行する。
+
+本番相当の `total` / `output` 時間にはベンチマーク時間を含めない。
+
+比較対象:
+
+1. baseline: 現行の `Encoding.stringToCode(csv) → Encoding.convert(...SJIS)`
+2. direct: CSV文字列を `Encoding.convert()` へ直接渡す
+3. chunked: 現行方式を2MiB文字単位に分割して実行
+
+候補方式について、処理時間だけでなくbaselineとのbyte完全一致を確認する。
+
+- `exact YES`: baselineと長さ・全byteが一致
+- `exact NO`: 出力仕様が異なるため高速でも採用しない
+- `unsupported`: 現在のencoding-japaneseではその経路を利用できない
+
+chunkedではUTF-16サロゲートペアの途中で分割しない。
+
+この検証段階では本番出力経路を変更しない。
