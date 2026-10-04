@@ -1,7 +1,8 @@
 const ADVANCED_BASE = "/job-tag-alias-master/";
 const MASTER_URL = ADVANCED_BASE + "data/job-tags.json";
 const DEFAULTS_URL = ADVANCED_BASE + "config/matching-defaults.json";
-const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004e";
+const ENTITIES_URL = ADVANCED_BASE + "data/location-entities.json";
+const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004f";
 
 let resourcePromise = null;
 
@@ -25,8 +26,12 @@ export async function loadAdvancedTagger() {
       if (!res.ok) throw new Error("判定設定を読み込めませんでした");
       return res.json();
     }),
+    fetch(ENTITIES_URL, { cache: "no-store" }).then(res => {
+      if (!res.ok) throw new Error("就業場所entity辞書を読み込めませんでした");
+      return res.json();
+    }),
     import(MATCHER_URL)
-  ]).then(([master, defaults, matcher]) => {
+  ]).then(([master, defaults, entities, matcher]) => {
     if (!matcher || typeof matcher.analyzeText !== "function") {
       throw new Error("Advanced判定エンジンを読み込めませんでした");
     }
@@ -39,21 +44,22 @@ export async function loadAdvancedTagger() {
     return {
       master,
       defaults,
+      entities,
       codeMap,
       version: master.schema_version,
       snapshotDate: master.snapshot_date,
       analyzeText(text) {
-        return matcher.analyzeText(text, master, defaults);
+        return matcher.analyzeText(text, master, defaults, entities);
       },
       analyzeFields(fields) {
         if (typeof matcher.analyzeFields === "function") {
-          return matcher.analyzeFields(fields, master, defaults);
+          return matcher.analyzeFields(fields, master, defaults, entities);
         }
         const fallbackText = (fields || [])
           .filter(field => field && field.value)
           .map(field => (LABEL_MAP[field.name] || field.name || "項目") + "：" + String(field.value))
           .join("\n");
-        return matcher.analyzeText(fallbackText, master, defaults);
+        return matcher.analyzeText(fallbackText, master, defaults, entities);
       }
     };
   }).catch(error => {
