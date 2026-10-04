@@ -197,24 +197,30 @@ patternタグ、海semantic pattern、entity由来タグはliteral候補の有�
 output最適化は、この実測で支配的な工程を確認してから行う。通常利用時の出力仕様・Shift-JIS固定方針は変更しない。
 
 
-### Shift-JIS benchmark
+### Shift-JIS chunked output
 
-`?debug=1` では、通常のShift-JIS出力を完了したあとに追加ベンチマークを実行する。
+通常CSV出力は、全文を一括変換せず2MiB文字単位でShift-JISへ変換する。
 
-本番相当の `total` / `output` 時間にはベンチマーク時間を含めない。
+処理:
 
-比較対象:
+1. CSV文字列を2MiB文字単位へ分割
+2. UTF-16サロゲートペア途中では分割しない
+3. 各chunkを `Encoding.stringToCode()`
+4. 各chunkを `Encoding.convert(..., SJIS)`
+5. 各結果を `Uint8Array` として保持
+6. `new Blob(parts)` で結合してダウンロード
 
-1. baseline: 現行の `Encoding.stringToCode(csv) → Encoding.convert(...SJIS)`
-2. direct: CSV文字列を `Encoding.convert()` へ直接渡す
-3. chunked: 現行方式を2MiB文字単位に分割して実行
+大容量CSVでの事前検証では、従来の全文一括変換と出力byteが完全一致した。
 
-候補方式について、処理時間だけでなくbaselineとのbyte完全一致を確認する。
+chunked変換中に例外が発生した場合のみ、従来の全文一括 `stringToCode → convert` へ自動fallbackする。
 
-- `exact YES`: baselineと長さ・全byteが一致
-- `exact NO`: 出力仕様が異なるため高速でも採用しない
-- `unsupported`: 現在のencoding-japaneseではその経路を利用できない
+`?debug=1` では次を確認できる。
 
-chunkedではUTF-16サロゲートペアの途中で分割しない。
+- unicode array: 全chunkのstringToCode合計時間
+- sjis convert: 全chunkのconvert合計時間
+- uint8 + blob: 各chunkのUint8Array化＋Blob生成時間
+- sjis chunks: 実際のchunk数
+- chunk chars: chunk上限文字数
+- sjis fallback: fallback発生有無
 
-この検証段階では本番出力経路を変更しない。
+通常出力とプレビューCSV出力は同じShift-JIS変換関数を使用する。
