@@ -226,6 +226,158 @@
         }).join('\r\n');
       };
 
+      const byteLengthOf = (data) => {
+        if (data == null) return 0;
+        return typeof data === 'string' ? data.length : data.length;
+      };
+
+      const byteAt = (data, index) => {
+        if (typeof data === 'string') return data.charCodeAt(index) & 0xff;
+        return Number(data[index]) & 0xff;
+      };
+
+      const compareByteArrays = (candidate, baseline, baselineOffset = 0) => {
+        const candidateLength = byteLengthOf(candidate);
+        if (!baseline || baselineOffset + candidateLength > baseline.length) {
+          return { same: false, compared: 0 };
+        }
+        for (let i = 0; i < candidateLength; i++) {
+          if (byteAt(candidate, i) !== (Number(baseline[baselineOffset + i]) & 0xff)) {
+            return { same: false, compared: i };
+          }
+        }
+        return { same: true, compared: candidateLength };
+      };
+
+      const safeChunkEnd = (text, proposedEnd) => {
+        if (proposedEnd <= 0 || proposedEnd >= text.length) return proposedEnd;
+        const prev = text.charCodeAt(proposedEnd - 1);
+        const next = text.charCodeAt(proposedEnd);
+        const prevIsHighSurrogate = prev >= 0xD800 && prev <= 0xDBFF;
+        const nextIsLowSurrogate = next >= 0xDC00 && next <= 0xDFFF;
+        return prevIsHighSurrogate && nextIsLowSurrogate ? proposedEnd - 1 : proposedEnd;
+      };
+
+      const benchmarkShiftJisEncoders = (csvContent, baselineSjisArray) => {
+        const result = {
+          benchmarkWallMs: 0,
+          direct: null,
+          chunked: null
+        };
+        const benchmarkStarted = performance.now();
+
+        // Candidate A: Encoding.convertへ文字列を直接渡す。
+        try {
+          const directStarted = performance.now();
+          let directOutput = Encoding.convert(csvContent, {
+            to: 'SJIS',
+            from: 'UNICODE',
+            type: 'array'
+          });
+          const directEncodeMs = performance.now() - directStarted;
+
+          const compareStarted = performance.now();
+          const directCompare = compareByteArrays(directOutput, baselineSjisArray, 0);
+          const directCompareMs = performance.now() - compareStarted;
+
+          result.direct = {
+            supported: true,
+            encodeMs: directEncodeMs,
+            compareMs: directCompareMs,
+            bytes: byteLengthOf(directOutput),
+            sameBytes: directCompare.same && byteLengthOf(directOutput) === baselineSjisArray.length
+          };
+          directOutput = null;
+        } catch (error) {
+          result.direct = {
+            supported: false,
+            encodeMs: 0,
+            compareMs: 0,
+            bytes: 0,
+            sameBytes: false,
+            error: String(error && error.message ? error.message : error)
+          };
+        }
+
+        // Candidate B: 現行と同じ stringToCode -> convert を2MiB文字単位で実施。
+        // SJISは状態を持たないため、byte完全一致を確認できれば同等経路として採用候補になる。
+        try {
+          const chunkChars = 2 * 1024 * 1024;
+          let start = 0;
+          let baselineOffset = 0;
+          let chunkCount = 0;
+          let stringToCodeMs = 0;
+          let convertMs = 0;
+          let compareMs = 0;
+          let sameBytes = true;
+
+          const chunkedStarted = performance.now();
+
+          while (start < csvContent.length) {
+            let end = safeChunkEnd(csvContent, Math.min(csvContent.length, start + chunkChars));
+            if (end <= start) end = Math.min(csvContent.length, start + chunkChars);
+
+            const chunk = csvContent.slice(start, end);
+
+            const codeStarted = performance.now();
+            const unicodeChunk = Encoding.stringToCode(chunk);
+            stringToCodeMs += performance.now() - codeStarted;
+
+            const convertStarted = performance.now();
+            const sjisChunk = Encoding.convert(unicodeChunk, {
+              to: 'SJIS',
+              from: 'UNICODE'
+            });
+            convertMs += performance.now() - convertStarted;
+
+            const compareStarted = performance.now();
+            const compared = compareByteArrays(sjisChunk, baselineSjisArray, baselineOffset);
+            compareMs += performance.now() - compareStarted;
+
+            if (!compared.same) {
+              sameBytes = false;
+              break;
+            }
+
+            baselineOffset += byteLengthOf(sjisChunk);
+            start = end;
+            chunkCount++;
+          }
+
+          const encodeWallMs = performance.now() - chunkedStarted - compareMs;
+          sameBytes = sameBytes && baselineOffset === baselineSjisArray.length;
+
+          result.chunked = {
+            supported: true,
+            chunkChars,
+            chunkCount,
+            stringToCodeMs,
+            convertMs,
+            encodeWallMs,
+            compareMs,
+            bytes: baselineOffset,
+            sameBytes
+          };
+        } catch (error) {
+          result.chunked = {
+            supported: false,
+            chunkChars: 2 * 1024 * 1024,
+            chunkCount: 0,
+            stringToCodeMs: 0,
+            convertMs: 0,
+            encodeWallMs: 0,
+            compareMs: 0,
+            bytes: 0,
+            sameBytes: false,
+            error: String(error && error.message ? error.message : error)
+          };
+        }
+
+        result.benchmarkWallMs = performance.now() - benchmarkStarted;
+        return result;
+      };
+
+
       const handleSelectedFile = (file) => {
         if (!file) return;
 
@@ -319,6 +471,8 @@
                   downloadSetupMs: 0,
                   csvChars: 0,
                   sjisBytes: 0,
+                  encodingBench: null,
+                  encodingBenchmarkMs: 0,
                   totalMs: 0,
                   compile: tagMode === 'advanced' && advancedTaggerRef.current
                     ? advancedTaggerRef.current.performanceMeta
@@ -535,8 +689,14 @@
                 if (debugPerf) debugPerf.downloadSetupMs = performance.now() - downloadStarted;
 
                 if (debugPerf) {
+                  // production相当の時間はここで固定する。以下のbenchmark追加時間は含めない。
                   debugPerf.outputMs = performance.now() - outputStarted;
                   debugPerf.totalMs = performance.now() - totalStarted;
+
+                  const benchStarted = performance.now();
+                  debugPerf.encodingBench = benchmarkShiftJisEncoders(csvContent, sjisArray);
+                  debugPerf.encodingBenchmarkMs = performance.now() - benchStarted;
+
                   setPerfInfo(debugPerf);
                   console.info('[tag-zip-labeler perf]', debugPerf);
                 }
@@ -836,6 +996,42 @@
                         <span>download setup: {perfInfo.downloadSetupMs.toFixed(1)} ms</span>
                         <span>csv chars: {perfInfo.csvChars.toLocaleString()}</span>
                         <span>sjis bytes: {perfInfo.sjisBytes.toLocaleString()}</span>
+                        {perfInfo.encodingBench && (
+                          <>
+                            <span>encoding bench: {perfInfo.encodingBenchmarkMs.toFixed(1)} ms</span>
+                            <span className="col-span-2 sm:col-span-3 font-sans font-bold text-slate-700">SJIS benchmark candidates</span>
+                            <span>
+                              direct: {perfInfo.encodingBench.direct && perfInfo.encodingBench.direct.supported
+                                ? `${perfInfo.encodingBench.direct.encodeMs.toFixed(1)} ms / bytes ${perfInfo.encodingBench.direct.bytes.toLocaleString()} / exact ${perfInfo.encodingBench.direct.sameBytes ? 'YES' : 'NO'}`
+                                : `unsupported / ${perfInfo.encodingBench.direct && perfInfo.encodingBench.direct.error ? perfInfo.encodingBench.direct.error : '-'}`}
+                            </span>
+                            <span>
+                              direct compare: {perfInfo.encodingBench.direct
+                                ? perfInfo.encodingBench.direct.compareMs.toFixed(1)
+                                : '0.0'} ms
+                            </span>
+                            <span>
+                              chunked: {perfInfo.encodingBench.chunked && perfInfo.encodingBench.chunked.supported
+                                ? `${perfInfo.encodingBench.chunked.encodeWallMs.toFixed(1)} ms / ${perfInfo.encodingBench.chunked.chunkCount} chunks / exact ${perfInfo.encodingBench.chunked.sameBytes ? 'YES' : 'NO'}`
+                                : `unsupported / ${perfInfo.encodingBench.chunked && perfInfo.encodingBench.chunked.error ? perfInfo.encodingBench.chunked.error : '-'}`}
+                            </span>
+                            <span>
+                              chunk code: {perfInfo.encodingBench.chunked
+                                ? perfInfo.encodingBench.chunked.stringToCodeMs.toFixed(1)
+                                : '0.0'} ms
+                            </span>
+                            <span>
+                              chunk convert: {perfInfo.encodingBench.chunked
+                                ? perfInfo.encodingBench.chunked.convertMs.toFixed(1)
+                                : '0.0'} ms
+                            </span>
+                            <span>
+                              chunk compare: {perfInfo.encodingBench.chunked
+                                ? perfInfo.encodingBench.chunked.compareMs.toFixed(1)
+                                : '0.0'} ms
+                            </span>
+                          </>
+                        )}
                         {perfInfo.mode === 'advanced' && (
                           <>
                             <span>matcher: {perfInfo.matcherTotalMs.toFixed(1)} ms</span>
