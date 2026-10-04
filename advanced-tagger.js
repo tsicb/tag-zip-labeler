@@ -2,7 +2,7 @@ const ADVANCED_BASE = "/job-tag-alias-master/";
 const MASTER_URL = ADVANCED_BASE + "data/job-tags.json";
 const DEFAULTS_URL = ADVANCED_BASE + "config/matching-defaults.json";
 const ENTITIES_URL = ADVANCED_BASE + "data/location-entities.json";
-const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004g";
+const MATCHER_URL = ADVANCED_BASE + "matcher.js?v=20261004h";
 
 let resourcePromise = null;
 

@@ -164,3 +164,19 @@ URLに `?debug=1` を付けると、CSV処理後にPerformance debugを表示す
 Advancedは `job-tag-alias-master` の `compileMatcher()` を読込時に1回だけ実行し、全求人で再利用する。求人ごとのalias/variant展開・検索語正規化・entity準備を繰り返さない。
 
 判定仕様は変更せず、compiled版と互換版の回帰結果一致を `job-tag-alias-master` 側CIで確認する。
+
+
+### Candidate index
+
+Advanced matcherは、全4,000件超の検索語を求人ごとに総当たりする代わりに、compiled時に候補抽出インデックスを構築します。
+
+各求人ではまず本文から候補タグだけを抽出し、その候補に対して従来どおりtoken境界・除外語・context・pattern等の精密判定を行います。候補抽出は判定結果を直接決めません。
+
+`?debug=1` では追加で次を確認できます。
+
+- candidate: 候補抽出に要した時間
+- candidate tags/job: 1求人あたり平均候補タグ数
+- indexed terms: 一括候補抽出へ登録されたユニーク検索語数
+- index nodes: 候補インデックスのノード数
+
+patternタグ、海semantic pattern、entity由来タグはliteral候補の有無にかかわらず評価されます。
