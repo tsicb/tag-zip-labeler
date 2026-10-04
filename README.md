@@ -142,3 +142,25 @@ Advanced側では現在、Legacyのkeyword masterには存在しない短語タ�
 ### Advancedの就業場所entity判定
 
 Advancedは `data/location-entities.json` も読み込み、セブンイレブン→コンビニエンスストア、セントレア→空港のような固有名詞→就業場所カテゴリ判定を行います。固有名詞HITだけで自動確定せず、勤務場所名・仕事内容・配送先などのフィールド/文脈ルールを通して matched / review を決定します。
+
+
+## Performance debug
+
+URLに `?debug=1` を付けると、CSV処理後にPerformance debugを表示する。
+
+表示項目:
+
+- 総処理時間
+- CSV解析
+- 行ループ
+- タグ判定時間
+- CSV出力
+- Advanced matcher内部の entity / tag scan / implication / sort
+- 1求人平均
+- compiled matcherのcompile時間・検索語数
+
+通常URLでは表示しない。
+
+Advancedは `job-tag-alias-master` の `compileMatcher()` を読込時に1回だけ実行し、全求人で再利用する。求人ごとのalias/variant展開・検索語正規化・entity準備を繰り返さない。
+
+判定仕様は変更せず、compiled版と互換版の回帰結果一致を `job-tag-alias-master` 側CIで確認する。
