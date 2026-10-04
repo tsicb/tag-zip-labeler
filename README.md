@@ -137,3 +137,8 @@ Advanced側では現在、Legacyのkeyword masterには存在しない短語タ�
 - Advancedで `review` を自動付与へ昇格させない。
 - 既存タグコードをAdvanced判定だけを理由に削除しない。
 - `job-tag-alias-master` のschema変更時は `advanced-tagger.js` の互換性を確認する。
+
+
+### Advancedの就業場所entity判定
+
+Advancedは `data/location-entities.json` も読み込み、セブンイレブン→コンビニエンスストア、セントレア→空港のような固有名詞→就業場所カテゴリ判定を行います。固有名詞HITだけで自動確定せず、勤務場所名・仕事内容・配送先などのフィールド/文脈ルールを通して matched / review を決定します。
