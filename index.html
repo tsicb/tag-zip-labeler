@@ -13,7 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.2.0/encoding.min.js"></script>
   <script>
     // Babel変換の影響を受けず、Advanced用ES Moduleを必要時だけ読み込むためのブリッジ
-    window.loadAdvancedTaggerModule = () => import('./advanced-tagger.js?v=20261004c');
+    window.loadAdvancedTaggerModule = () => import('./advanced-tagger.js?v=20261004d');
   </script>
 </head>
 <body>
@@ -52,6 +52,8 @@
       const [advancedStatus, setAdvancedStatus] = useState({ type: 'idle', message: '' });
       const [showTagHelp, setShowTagHelp] = useState(false);
       const [advancedDetail, setAdvancedDetail] = useState(null);
+      const [perfInfo, setPerfInfo] = useState(null);
+      const debugMode = new URLSearchParams(window.location.search).get('debug') === '1';
       const advancedTaggerRef = useRef(null);
       const fileInputRef = useRef(null);
 
@@ -121,6 +123,7 @@
           const resource = {
             ...loaded,
             buildAdvancedSource: module.buildAdvancedSource,
+            buildAdvancedSourceFromFields: module.buildAdvancedSourceFromFields,
             buildAdvancedFields: module.buildAdvancedFields
           };
           advancedTaggerRef.current = resource;
@@ -232,6 +235,7 @@
         }
 
         setIsProcessing(true);
+        setPerfInfo(null);
         setStatusInfo({ type: 'processing', message: '処理中...' });
 
         // isRetryフラグを追加し、再チャレンジかどうかを判定できるようにする
@@ -240,6 +244,7 @@
           reader.onload = (event) => {
             setTimeout(() => {
               try {
+                const totalStarted = performance.now();
                 let text = event.target.result;
                 
                 // 【対策1】ファイルの先頭にBOM（見えないゴミ）が付着している場合は取り除く
@@ -247,7 +252,9 @@
                   text = text.slice(1);
                 }
 
+                const parseStarted = performance.now();
                 const parsed = parseCSV(text);
+                const csvParseMs = performance.now() - parseStarted;
                 
                 if (parsed.length <= 1) {
                   setStatusInfo({ type: 'error', message: 'CSVデータが空か、ヘッダー行しかありません。' });
@@ -290,6 +297,24 @@
                 }
 
                 const newPreviewData = [];
+                const debugPerf = debugMode ? {
+                  mode: tagMode,
+                  rows: parsed.length - 1,
+                  csvParseMs,
+                  rowLoopMs: 0,
+                  taggingWallMs: 0,
+                  matcherTotalMs: 0,
+                  matcherEntityMs: 0,
+                  matcherTagScanMs: 0,
+                  matcherImplicationMs: 0,
+                  matcherSortMs: 0,
+                  outputMs: 0,
+                  totalMs: 0,
+                  compile: tagMode === 'advanced' && advancedTaggerRef.current
+                    ? advancedTaggerRef.current.performanceMeta
+                    : null
+                } : null;
+                const rowLoopStarted = performance.now();
 
                 const processedData = parsed.map((row, rowIndex) => {
                   if (rowIndex === 0) {
@@ -342,8 +367,24 @@
                       featureTexts
                     };
                     const advancedFields = tagger.buildAdvancedFields(advancedArgs);
-                    const advancedSource = tagger.buildAdvancedSource(advancedArgs);
-                    const analysis = tagger.analyzeFields(advancedFields);
+                    const advancedSource = tagger.buildAdvancedSourceFromFields
+                      ? tagger.buildAdvancedSourceFromFields(advancedFields)
+                      : tagger.buildAdvancedSource(advancedArgs);
+                    const tagStarted = debugPerf ? performance.now() : 0;
+                    const analysis = tagger.analyzeFields(
+                      advancedFields,
+                      debugPerf ? { profile: true } : undefined
+                    );
+                    if (debugPerf) {
+                      debugPerf.taggingWallMs += performance.now() - tagStarted;
+                      if (analysis.profile) {
+                        debugPerf.matcherTotalMs += analysis.profile.totalMs || 0;
+                        debugPerf.matcherEntityMs += analysis.profile.entityMs || 0;
+                        debugPerf.matcherTagScanMs += analysis.profile.tagScanMs || 0;
+                        debugPerf.matcherImplicationMs += analysis.profile.implicationMs || 0;
+                        debugPerf.matcherSortMs += analysis.profile.sortMs || 0;
+                      }
+                    }
 
                     foundCodes = analysis.matched.map(item => String(item.tag_code));
                     foundKeywords = analysis.matched.map(item => item.job_tag || item.canonical);
@@ -357,12 +398,14 @@
                     };
                   } else {
                     // 現行方式は従来どおり完全部分一致を維持
+                    const tagStarted = debugPerf ? performance.now() : 0;
                     keywordRules.forEach(rule => {
                       if (combinedText.includes(rule.keyword)) {
                         foundCodes.push(rule.code);
                         foundKeywords.push(rule.keyword);
                       }
                     });
+                    if (debugPerf) debugPerf.taggingWallMs += performance.now() - tagStarted;
                   }
 
                   let existingCodes = [];
@@ -430,9 +473,12 @@
                   return newRow;
                 });
 
+                if (debugPerf) debugPerf.rowLoopMs = performance.now() - rowLoopStarted;
+
                 setPreviewData(newPreviewData);
                 setProcessedTagMode(tagMode);
 
+                const outputStarted = performance.now();
                 const csvContent = generateCSV(processedData);
                 
                 // 出力は常に入力に関わらず Shift-JIS に変換する
@@ -453,6 +499,13 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+
+                if (debugPerf) {
+                  debugPerf.outputMs = performance.now() - outputStarted;
+                  debugPerf.totalMs = performance.now() - totalStarted;
+                  setPerfInfo(debugPerf);
+                  console.info('[tag-zip-labeler perf]', debugPerf);
+                }
 
                 setStatusInfo({ 
                   type: 'success', 
@@ -725,6 +778,39 @@
                     <div className="text-red-500 font-bold flex items-center bg-red-50 px-5 py-3 rounded-full border border-red-200">
                       <Icons.AlertCircle className="w-5 h-5 mr-2" />
                       {statusInfo.message}
+                    </div>
+                  )}
+                  {debugMode && perfInfo && statusInfo.type === 'success' && (
+                    <div className="mt-4 w-full max-w-2xl rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="font-bold text-slate-700">Performance debug</span>
+                        <span className="rounded-full bg-white px-2 py-1 font-mono">{perfInfo.mode}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono sm:grid-cols-3">
+                        <span>rows: {perfInfo.rows}</span>
+                        <span>total: {perfInfo.totalMs.toFixed(1)} ms</span>
+                        <span>avg: {(perfInfo.totalMs / Math.max(1, perfInfo.rows)).toFixed(2)} ms/job</span>
+                        <span>parse: {perfInfo.csvParseMs.toFixed(1)} ms</span>
+                        <span>row loop: {perfInfo.rowLoopMs.toFixed(1)} ms</span>
+                        <span>tagging: {perfInfo.taggingWallMs.toFixed(1)} ms</span>
+                        <span>output: {perfInfo.outputMs.toFixed(1)} ms</span>
+                        {perfInfo.mode === 'advanced' && (
+                          <>
+                            <span>matcher: {perfInfo.matcherTotalMs.toFixed(1)} ms</span>
+                            <span>entity: {perfInfo.matcherEntityMs.toFixed(1)} ms</span>
+                            <span>tag scan: {perfInfo.matcherTagScanMs.toFixed(1)} ms</span>
+                            <span>implication: {perfInfo.matcherImplicationMs.toFixed(1)} ms</span>
+                            <span>sort: {perfInfo.matcherSortMs.toFixed(1)} ms</span>
+                            {perfInfo.compile && (
+                              <>
+                                <span>compile: {Number(perfInfo.compile.compileMs || 0).toFixed(1)} ms</span>
+                                <span>terms: {perfInfo.compile.termCount || '-'}</span>
+                                <span>entity terms: {perfInfo.compile.entityTermCount || '-'}</span>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
